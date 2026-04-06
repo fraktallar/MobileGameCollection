@@ -131,26 +131,22 @@ public class SnakeHead : MonoBehaviour
     }
 
     void Move()
+{
+    direction = nextDirection;
+    positionHistory.Insert(0, transform.position);
+
+    Vector3 newPos = transform.position + (Vector3)direction;
+
+    // Sınır kontrolü — kamera boyutuna göre dinamik
+    Camera cam = Camera.main;
+    float camH = cam.orthographicSize;
+    float camW = camH * cam.aspect;
+
+    if (newPos.x >= camW - 0.5f || newPos.x <= -camW + 0.5f ||
+        newPos.y >= 10f         || newPos.y <= -10f)
     {
-        direction = nextDirection;
-        positionHistory.Insert(0, transform.position);
-
-        Vector3 newPos = transform.position + (Vector3)direction;
-
-        // Sınır kontrolü
-        if (newPos.x > 10 || newPos.x < -10 || newPos.y > 10 || newPos.y < -10)
-        {
-            Die(); return;
-        }
-
-        // Kendine çarpma (ilk 2 parçayı atla)
-        for (int i = 2; i < bodyParts.Count; i++)
-        {
-            if (Vector3.Distance(newPos, bodyParts[i].transform.position) < 0.5f)
-            {
-                Die(); return;
-            }
-        }
+        Die(); return;
+    }
 
         transform.position = newPos;
 
@@ -201,13 +197,15 @@ public class SnakeHead : MonoBehaviour
     }
 
     void OnTriggerEnter2D(Collider2D other)
+{
+    if (other.CompareTag("Food"))
     {
-        if (other.CompareTag("Food"))
-        {
-            GrowBody();
-            SnakeGameManager.Instance.AddScore(10);
-            Destroy(other.gameObject);
-            FindObjectOfType<FoodSpawner>().SpawnFood();
-        }
+        GrowBody();
+        SnakeGameManager.Instance.AddScore(10);
+        SnakeGameManager.Instance.IncreaseSpeed();  // ← hız artışı
+        moveInterval = SnakeGameManager.Instance.GetMoveInterval(); // ← yeni hızı al
+        Destroy(other.gameObject);
+        FindObjectOfType<FoodSpawner>().SpawnFood();
     }
+}
 }
