@@ -10,6 +10,7 @@ public class FoodSpawner : MonoBehaviour
     public void SpawnFood()
     {
         Camera cam = Camera.main;
+        if (cam == null) return;
         int xMax = Mathf.FloorToInt(cam.orthographicSize * cam.aspect) - 1;
         int yMax = Mathf.FloorToInt(cam.orthographicSize) - 1;
 

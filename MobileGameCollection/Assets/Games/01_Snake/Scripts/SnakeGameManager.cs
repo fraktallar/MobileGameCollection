@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using TMPro;
 
@@ -18,15 +20,22 @@ public class SnakeGameManager : MonoBehaviour
     private GameObject gameOverPanel;
     private TextMeshProUGUI finalScoreText;
 
+    private GameObject snakeHeadGO;
+    private GameObject foodSpawnerGO;
+    private readonly List<GameObject> borderObjects = new List<GameObject>();
+
     void Awake()
     {
         Instance = this;
+        Time.timeScale = 1f;
         highScore = PlayerPrefs.GetInt("Snake_HighScore", 0);
-        Camera.main.orthographicSize = 11f;
     }
 
     void Start()
     {
+        Camera cam = Camera.main ?? FindObjectOfType<Camera>();
+        if (cam != null) cam.orthographicSize = 11f;
+
         CreateUI();
         UpdateUI();
         DrawBorders();
@@ -35,15 +44,23 @@ public class SnakeGameManager : MonoBehaviour
 
     void SpawnGameObjects()
     {
-        GameObject headGO = new GameObject("SnakeHead");
-        headGO.AddComponent<SnakeHead>();
+        snakeHeadGO = new GameObject("SnakeHead");
+        snakeHeadGO.AddComponent<SnakeHead>();
 
-        GameObject spawnerGO = new GameObject("FoodSpawner");
-        spawnerGO.AddComponent<FoodSpawner>();
+        foodSpawnerGO = new GameObject("FoodSpawner");
+        foodSpawnerGO.AddComponent<FoodSpawner>();
     }
 
     void CreateUI()
     {
+        // EventSystem (buton tıklamaları için zorunlu)
+        if (FindObjectOfType<EventSystem>() == null)
+        {
+            GameObject esGO = new GameObject("EventSystem");
+            esGO.AddComponent<EventSystem>();
+            esGO.AddComponent<StandaloneInputModule>();
+        }
+
         // Canvas
         GameObject canvasGO = new GameObject("Canvas");
         Canvas canvas = canvasGO.AddComponent<Canvas>();
@@ -150,7 +167,8 @@ public class SnakeGameManager : MonoBehaviour
 
     void DrawBorders()
     {
-        Camera cam = Camera.main;
+        Camera cam = Camera.main ?? FindObjectOfType<Camera>();
+        if (cam == null) return;
         float camH = cam.orthographicSize;
         float camW = camH * cam.aspect;
 
@@ -168,6 +186,7 @@ public class SnakeGameManager : MonoBehaviour
     void CreateBorderLine(Vector3 position, Vector3 scale)
     {
         GameObject line = new GameObject("Border");
+        borderObjects.Add(line);
         line.transform.position = position;
         line.transform.localScale = scale;
         SpriteRenderer sr = line.AddComponent<SpriteRenderer>();
@@ -208,7 +227,29 @@ public class SnakeGameManager : MonoBehaviour
 
     public void RestartGame()
     {
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        // Eski nesneleri temizle
+        if (snakeHeadGO != null)
+        {
+            snakeHeadGO.GetComponent<SnakeHead>()?.Cleanup();
+            Destroy(snakeHeadGO);
+        }
+        if (foodSpawnerGO != null) Destroy(foodSpawnerGO);
+
+        foreach (var b in borderObjects) if (b != null) Destroy(b);
+        borderObjects.Clear();
+
+        foreach (var food in GameObject.FindGameObjectsWithTag("Food"))
+            Destroy(food);
+
+        // State sıfırla
+        score = 0;
+        isGameOver = false;
+        moveInterval = 0.2f;
+
+        gameOverPanel.SetActive(false);
+        UpdateUI();
+        DrawBorders();
+        SpawnGameObjects();
     }
 
     public void GoToMainMenu()

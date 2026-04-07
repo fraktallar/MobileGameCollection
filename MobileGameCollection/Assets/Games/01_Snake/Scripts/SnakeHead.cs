@@ -14,9 +14,10 @@ public class SnakeHead : MonoBehaviour
     private float moveTimer = 0f;
     private bool isDead = false;
 
-    // Swipe
     private Vector2 touchStartPos;
-    private const float SWIPE_THRESHOLD = 50f;
+    private bool swipeRegistered = false;
+    private const float SWIPE_THRESHOLD = 40f;
+
 
     void Start()
     {
@@ -106,9 +107,12 @@ public class SnakeHead : MonoBehaviour
         Touch touch = Input.GetTouch(0);
 
         if (touch.phase == TouchPhase.Began)
+        {
             touchStartPos = touch.position;
+            swipeRegistered = false;
+        }
 
-        if (touch.phase == TouchPhase.Ended)
+        if ((touch.phase == TouchPhase.Moved || touch.phase == TouchPhase.Ended) && !swipeRegistered)
         {
             Vector2 delta = touch.position - touchStartPos;
             if (delta.magnitude < SWIPE_THRESHOLD) return;
@@ -127,7 +131,14 @@ public class SnakeHead : MonoBehaviour
                 else if (delta.y < 0 && direction != Vector2.up)
                     nextDirection = Vector2.down;
             }
+
+            // Bir sonraki swipe için sıfırla (parmak kaldırmadan arka arkaya yön değiştirme)
+            swipeRegistered = true;
+            touchStartPos = touch.position;
         }
+
+        if (touch.phase == TouchPhase.Ended)
+            swipeRegistered = false;
     }
 
     void Move()
@@ -139,6 +150,7 @@ public class SnakeHead : MonoBehaviour
 
     // Sınır kontrolü — kamera boyutuna göre dinamik
     Camera cam = Camera.main;
+    if (cam == null) return;
     float camH = cam.orthographicSize;
     float camW = camH * cam.aspect;
 
@@ -173,9 +185,16 @@ public class SnakeHead : MonoBehaviour
         SnakeGameManager.Instance.GameOver();
     }
 
+    public void Cleanup()
+    {
+        foreach (var part in bodyParts)
+            if (part != null) Destroy(part);
+        bodyParts.Clear();
+    }
+
     void SpawnBodyPart()
     {
-        GameObject part = new GameObject("BodyPart_" + bodyParts.Count);
+        GameObject part = new GameObject("BodyPart_" + bodyParts.Count) { tag = "BodyPart" };
 
         // Renk: head koyu yeşil, geri kalanlar biraz daha açık
         Color bodyColor = bodyParts.Count == 0
@@ -194,7 +213,7 @@ public class SnakeHead : MonoBehaviour
 
     public void GrowBody()
     {
-        GameObject part = new GameObject("BodyPart_" + bodyParts.Count);
+        GameObject part = new GameObject("BodyPart_" + bodyParts.Count) { tag = "BodyPart" };
         SetupVisual(part, new Color(0.18f, 0.65f, 0.32f));
 
         Vector3 spawnPos = bodyParts.Count > 0
