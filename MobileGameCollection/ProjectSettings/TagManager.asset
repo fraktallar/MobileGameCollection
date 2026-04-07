@@ -7,6 +7,9 @@ TagManager:
   - Food
   - Paddle
   - Brick
+  - Ground
+  - Pipe
+  - ScoreZone
   layers:
   - Default
   - TransparentFX
