@@ -80,6 +80,8 @@ public class BubbleGrid : MonoBehaviour
     var matches = FindMatches(bd);
     if (matches.Count >= 3)
     {
+        GameAudio.PlayExplode();
+        CameraShake.Shake(0.2f, 0.1f);
         foreach (var b in matches)
         {
             activeBubbles.Remove(b);
@@ -89,6 +91,8 @@ public class BubbleGrid : MonoBehaviour
         BubbleGameManager.Instance.CheckWin();
         return true;
     }
+
+    GameAudio.PlayBounce();
 
     if (snapped.y < -5f)
         BubbleGameManager.Instance.GameOver();

@@ -23,6 +23,8 @@ public class BirdController : MonoBehaviour
     void Update()
     {
         if (isDead) return;
+        
+        GameAudio.PlayJump();
 
         // Input
         bool tapped = Input.GetKeyDown(KeyCode.Space) ||
@@ -114,6 +116,8 @@ foreach (GameObject zone in zones)
 
     void Die()
     {
+        GameAudio.PlayGameOver();
+        CameraShake.Shake(0.3f, 0.2f);
         if (isDead) return;
         isDead = true;
         FlappyGameManager.Instance.GameOver();

@@ -143,9 +143,18 @@ public class SnakeHead : MonoBehaviour
     float camW = camH * cam.aspect;
 
     if (newPos.x >= camW - 0.5f || newPos.x <= -camW + 0.5f ||
-        newPos.y >= 10f         || newPos.y <= -10f)
+        newPos.y >= camH - 0.5f || newPos.y <= -(camH - 0.5f))
     {
         Die(); return;
+    }
+
+    // Kendine çarpma kontrolü
+    for (int i = 0; i < bodyParts.Count; i++)
+    {
+        if (Vector3.Distance(newPos, bodyParts[i].transform.position) < 0.5f)
+        {
+            Die(); return;
+        }
     }
 
         transform.position = newPos;
@@ -201,6 +210,7 @@ public class SnakeHead : MonoBehaviour
     if (other.CompareTag("Food"))
     {
         GrowBody();
+        GameAudio.PlayCollect();
         SnakeGameManager.Instance.AddScore(10);
         SnakeGameManager.Instance.IncreaseSpeed();  // ← hız artışı
         moveInterval = SnakeGameManager.Instance.GetMoveInterval(); // ← yeni hızı al

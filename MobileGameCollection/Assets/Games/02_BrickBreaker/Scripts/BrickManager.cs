@@ -286,6 +286,7 @@ void CreateButton(GameObject parent, string label,
     // ── Oyun olayları ────────────────────────────────────
     public void BrickDestroyed(int points)
     {
+        GameAudio.PlayPop();
         if (gameEnded) return;
         score += points;
         brokenBricks++;
@@ -316,6 +317,8 @@ void CreateButton(GameObject parent, string label,
 
     public void LoseLife()
     {
+        GameAudio.PlayGameOver();
+        CameraShake.Shake(0.3f, 0.15f);
         if (gameEnded) return;
         lives--;
         UpdateUI();

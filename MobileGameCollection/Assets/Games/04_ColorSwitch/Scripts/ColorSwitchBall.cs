@@ -88,6 +88,7 @@ public class ColorSwitchBall : MonoBehaviour
             if (dist < innerR - radius && !wheel.Scored)
             {
                 wheel.Scored = true;
+                GameAudio.PlayScore();
                 ColorSwitchManager.Instance.AddScore();
                 // Rengi değiştir
                 colorIndex = (colorIndex + 1) % 
@@ -111,6 +112,8 @@ public class ColorSwitchBall : MonoBehaviour
 
     void Die()
     {
+        GameAudio.PlayGameOver();
+        CameraShake.Shake(0.4f, 0.25f);
         if (isDead) return;
         isDead = true;
         ColorSwitchManager.Instance.GameOver();

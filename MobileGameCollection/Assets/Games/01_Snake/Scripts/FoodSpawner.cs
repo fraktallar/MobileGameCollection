@@ -2,9 +2,6 @@ using UnityEngine;
 
 public class FoodSpawner : MonoBehaviour
 {
-    private int gridMin = -9;
-    private int gridMax = 9;
-
     void Start()
     {
         SpawnFood();
@@ -12,8 +9,12 @@ public class FoodSpawner : MonoBehaviour
 
     public void SpawnFood()
     {
-        int x = Random.Range(gridMin, gridMax + 1);
-        int y = Random.Range(gridMin, gridMax + 1);
+        Camera cam = Camera.main;
+        int xMax = Mathf.FloorToInt(cam.orthographicSize * cam.aspect) - 1;
+        int yMax = Mathf.FloorToInt(cam.orthographicSize) - 1;
+
+        int x = Random.Range(-xMax, xMax + 1);
+        int y = Random.Range(-yMax, yMax + 1);
 
         GameObject food = new GameObject("Food");
         food.transform.position = new Vector3(x, y, 0);
