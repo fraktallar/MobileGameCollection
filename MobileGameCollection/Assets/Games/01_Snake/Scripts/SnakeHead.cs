@@ -25,7 +25,7 @@ public class SnakeHead : MonoBehaviour
         transform.position = Vector3.zero;
 
         // Head'e görsel + collider ekle (Inspector'a gerek yok)
-        SetupVisual(gameObject, new Color(0.29f, 0.87f, 0.5f)); // yeşil
+        SetupVisual(gameObject, Color.white, isHead: true);
         SetupCollider(gameObject, true);
 
         // Başlangıç body'leri
@@ -34,12 +34,12 @@ public class SnakeHead : MonoBehaviour
     }
 
     // Sprite'ı koddan oluştur
-    void SetupVisual(GameObject obj, Color color)
+    void SetupVisual(GameObject obj, Color color, bool isHead = false)
     {
         SpriteRenderer sr = obj.GetComponent<SpriteRenderer>();
         if (sr == null) sr = obj.AddComponent<SpriteRenderer>();
-        sr.sprite = CreateSquareSprite();
-        sr.color = color;
+        sr.sprite = isHead ? CreateHeadSprite() : CreateBodySprite(color);
+        sr.color  = Color.white; // renk texture'a gömülü
         sr.sortingOrder = 1;
     }
 
@@ -60,19 +60,93 @@ public class SnakeHead : MonoBehaviour
         }
     }
 
-    // 16x16 beyaz kare sprite oluştur
-    Sprite CreateSquareSprite()
+    // ── Kafa sprite: oval + gözler + dil ────────────────────────────────────
+    Sprite CreateHeadSprite()
     {
-        Texture2D tex = new Texture2D(16, 16);
-        Color[] pixels = new Color[16 * 16];
-        for (int i = 0; i < pixels.Length; i++)
-            pixels[i] = Color.white;
-        tex.SetPixels(pixels);
+        int sz = 64;
+        var tex = new Texture2D(sz, sz) { filterMode = FilterMode.Bilinear };
+        for (int y = 0; y < sz; y++) for (int x = 0; x < sz; x++) tex.SetPixel(x, y, Color.clear);
+
+        Color bodyGreen = new Color(0.22f, 0.82f, 0.32f);
+        Color darkGreen = new Color(0.12f, 0.52f, 0.18f);
+        Color outline   = new Color(0.08f, 0.35f, 0.10f);
+
+        // Oval gövde (sağa uzun — yön sağ kabul)
+        for (int y = 4; y < 60; y++)
+        for (int x = 4; x < 62; x++)
+        {
+            float nx = (x - 33f) / 27f, ny = (y - 32f) / 26f;
+            float d  = nx * nx + ny * ny;
+            if (d > 1f) continue;
+            Color c = Color.Lerp(bodyGreen, darkGreen, Mathf.Clamp01(d * 1.2f + ny * 0.3f));
+            tex.SetPixel(x, y, d > 0.88f ? outline : c);
+        }
+
+        // Sağ burun ucu (biraz daha sivri)
+        for (int y = 20; y < 44; y++)
+        for (int x = 52; x < 64; x++)
+        {
+            float nx = (x - 54f) / 10f, ny = (y - 32f) / 11f;
+            if (nx * nx + ny * ny < 1f) tex.SetPixel(x, y, darkGreen);
+        }
+
+        // Gözler (sağ tarafa yakın, üst + alt)
+        DrawEye(tex, 46, 44); // üst göz
+        DrawEye(tex, 46, 20); // alt göz
+
+        // Dil (kırmızı, iki çatal, sağdan çıkıyor)
+        Color tongue = new Color(0.90f, 0.10f, 0.15f);
+        for (int x = 57; x < 64; x++) tex.SetPixel(x, 32, tongue);
+        for (int x = 62; x < 66 && x < sz; x++) { tex.SetPixel(x, 34, tongue); tex.SetPixel(x, 30, tongue); }
+
         tex.Apply();
-        return Sprite.Create(tex,
-            new Rect(0, 0, 16, 16),
-            new Vector2(0.5f, 0.5f),
-            16f);
+        return Sprite.Create(tex, new Rect(0, 0, sz, sz), new Vector2(0.5f, 0.5f), sz);
+    }
+
+    void DrawEye(Texture2D tex, int cx, int cy)
+    {
+        // Beyaz kısım
+        for (int dy = -6; dy <= 6; dy++) for (int dx = -6; dx <= 6; dx++)
+            if (dx*dx+dy*dy <= 36 && cx+dx >= 0 && cx+dx < tex.width && cy+dy >= 0 && cy+dy < tex.height)
+                tex.SetPixel(cx+dx, cy+dy, Color.white);
+        // Siyah bebek
+        for (int dy = -3; dy <= 3; dy++) for (int dx = -2; dx <= 2; dx++)
+            if (dx*dx*2+dy*dy <= 10 && cx+dx >= 0 && cx+dx < tex.width && cy+dy >= 0 && cy+dy < tex.height)
+                tex.SetPixel(cx+dx, cy+dy, new Color(0.05f, 0.05f, 0.05f));
+        // Parlama
+        if (cx+2 < tex.width && cy+3 < tex.height) tex.SetPixel(cx+2, cy+3, Color.white);
+    }
+
+    // ── Gövde sprite: pürüzsüz daire ────────────────────────────────────────
+    Sprite CreateBodySprite(Color tint)
+    {
+        int sz = 64;
+        var tex = new Texture2D(sz, sz) { filterMode = FilterMode.Bilinear };
+        for (int y = 0; y < sz; y++) for (int x = 0; x < sz; x++) tex.SetPixel(x, y, Color.clear);
+
+        Color bodyGreen = new Color(0.18f, 0.72f, 0.28f);
+        Color darkGreen = new Color(0.10f, 0.45f, 0.15f);
+        Color outline   = new Color(0.07f, 0.30f, 0.09f);
+
+        for (int y = 3; y < 61; y++)
+        for (int x = 3; x < 61; x++)
+        {
+            float nx = (x - 32f) / 27f, ny = (y - 32f) / 27f;
+            float d  = nx * nx + ny * ny;
+            if (d > 1f) continue;
+            Color c = Color.Lerp(bodyGreen, darkGreen, Mathf.Clamp01(d * 1.3f));
+            tex.SetPixel(x, y, d > 0.88f ? outline : c);
+        }
+        // Küçük parlama
+        for (int y = 38; y < 48; y++) for (int x = 20; x < 30; x++)
+        {
+            float nx = (x-25f)/5f, ny = (y-43f)/4f;
+            if (nx*nx+ny*ny < 1f)
+                tex.SetPixel(x, y, new Color(0.45f, 0.95f, 0.55f, 0.6f));
+        }
+
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, sz, sz), new Vector2(0.5f, 0.5f), sz);
     }
 
     void Update()
@@ -144,6 +218,13 @@ public class SnakeHead : MonoBehaviour
     void Move()
 {
     direction = nextDirection;
+
+    // Kafa yönü rotasyonu
+    float angle = direction == Vector2.right ?   0f :
+                  direction == Vector2.left  ? 180f :
+                  direction == Vector2.up    ?  90f : -90f;
+    transform.rotation = Quaternion.Euler(0, 0, angle);
+
     positionHistory.Insert(0, transform.position);
 
     Vector3 newPos = transform.position + (Vector3)direction;
@@ -196,12 +277,7 @@ public class SnakeHead : MonoBehaviour
     {
         GameObject part = new GameObject("BodyPart_" + bodyParts.Count) { tag = "BodyPart" };
 
-        // Renk: head koyu yeşil, geri kalanlar biraz daha açık
-        Color bodyColor = bodyParts.Count == 0
-            ? new Color(0.13f, 0.77f, 0.37f)
-            : new Color(0.18f, 0.65f, 0.32f);
-
-        SetupVisual(part, bodyColor);
+        SetupVisual(part, Color.white);
 
         // Başlangıçta head'in soluna diz
         part.transform.position = new Vector3(
@@ -214,7 +290,7 @@ public class SnakeHead : MonoBehaviour
     public void GrowBody()
     {
         GameObject part = new GameObject("BodyPart_" + bodyParts.Count) { tag = "BodyPart" };
-        SetupVisual(part, new Color(0.18f, 0.65f, 0.32f));
+        SetupVisual(part, Color.white);
 
         Vector3 spawnPos = bodyParts.Count > 0
             ? bodyParts[bodyParts.Count - 1].transform.position

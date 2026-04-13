@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using TMPro;
 
@@ -19,46 +20,80 @@ public class FlappyGameManager : MonoBehaviour
     private bool gameStarted = false;
     private bool gameEnded = false;
 
-    void Awake() => Instance = this;
+    private GameObject birdGO;
+    private GameObject pipeSpawnerGO;
+
+    void Awake() { Instance = this; Time.timeScale = 1f; }
 
     void Start()
     {
+        PauseManager.OnRestart += Restart;
         highScore = PlayerPrefs.GetInt("Flappy_HighScore", 0);
         BuildUI();
         SpawnWorld();
     }
 
+    void OnDestroy() => PauseManager.OnRestart -= Restart;
+
     // ── Dünya nesnelerini oluştur ──
     void SpawnWorld()
-{
-    Camera.main.backgroundColor = new Color(0.3f, 0.75f, 0.79f);
+    {
+        Camera cam = Camera.main;
+        if (cam != null)
+        {
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = FlappyArtUtil.SkyBottom;
+        }
 
-    // Görsel zemin (sadece görsel, çarpışma Y ile kontrol ediliyor)
-    CreateVisualGround();
+        if (GameObject.Find("FlappySkyBG") == null)
+            CreateSkyBackground(cam);
+        if (GameObject.Find("FlappyCloudsRoot") == null)
+        {
+            GameObject cloudRoot = new GameObject("FlappyCloudsRoot");
+            cloudRoot.AddComponent<FlappyClouds>();
+        }
 
-    // Kuş
-    GameObject bird = new GameObject("Bird");
-    bird.transform.position = new Vector3(-1.5f, 0, 0);
-    bird.AddComponent<BirdController>();
+        CreateVisualGround(cam);
 
-    // Pipe Spawner
-    new GameObject("PipeSpawner").AddComponent<PipeSpawner>();
-}
+        birdGO = new GameObject("Bird");
+        birdGO.transform.position = new Vector3(-1.5f, 0, 0);
+        birdGO.AddComponent<BirdController>();
 
-void CreateVisualGround()
-{
-    GameObject ground = new GameObject("Ground");
-    ground.transform.position = new Vector3(0, -5f, 0);
-    ground.transform.localScale = new Vector3(30f, 1f, 1f);
+        pipeSpawnerGO = new GameObject("PipeSpawner");
+        pipeSpawnerGO.AddComponent<PipeSpawner>();
+    }
 
-    SpriteRenderer sr = ground.AddComponent<SpriteRenderer>();
-    Texture2D tex = new Texture2D(1, 1);
-    tex.SetPixel(0, 0, Color.white); tex.Apply();
-    sr.sprite = Sprite.Create(tex, new Rect(0,0,1,1),
-                              new Vector2(0.5f,0.5f), 1f);
-    sr.color  = new Color(0.55f, 0.4f, 0.2f);
-    sr.sortingOrder = 2;
-}
+    void CreateSkyBackground(Camera cam)
+    {
+        if (cam == null) return;
+
+        GameObject bg = new GameObject("FlappySkyBG");
+        bg.transform.position = new Vector3(cam.transform.position.x, cam.transform.position.y, 2f);
+        SpriteRenderer sr = bg.AddComponent<SpriteRenderer>();
+        sr.sprite = FlappyArtUtil.BuildSkyGradient(72, 144);
+        sr.sortingOrder = -24;
+        float h = cam.orthographicSize * 2.85f;
+        float w = h * cam.aspect;
+        bg.transform.localScale = new Vector3(w / 72f, h / 144f, 1f);
+    }
+
+    void CreateVisualGround(Camera cam)
+    {
+        if (cam == null) return;
+
+        float halfW = cam.orthographicSize * cam.aspect;
+        GameObject ground = new GameObject("Ground");
+        ground.transform.position = new Vector3(cam.transform.position.x, -5.12f, 0f);
+
+        Sprite spr = FlappyArtUtil.BuildGrassStrip(512, 96);
+        float ppu = 96f / 2.28f;
+        float worldW = 512f / ppu;
+        ground.transform.localScale = new Vector3((halfW * 2.55f) / worldW, 1f, 1f);
+
+        SpriteRenderer sr = ground.AddComponent<SpriteRenderer>();
+        sr.sprite = spr;
+        sr.sortingOrder = 2;
+    }
 
     void CreateBoundary(string name, Vector3 pos, Vector3 scale,
                         Color? color = null, bool visible = false)
@@ -82,6 +117,13 @@ void CreateVisualGround()
     // ── UI ──
     void BuildUI()
     {
+        if (FindObjectOfType<EventSystem>() == null)
+        {
+            GameObject es = new GameObject("EventSystem");
+            es.AddComponent<EventSystem>();
+            es.AddComponent<StandaloneInputModule>();
+        }
+
         GameObject canvasGO = new GameObject("Canvas");
         Canvas canvas = canvasGO.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -91,18 +133,19 @@ void CreateVisualGround()
         scaler.matchWidthOrHeight = 0.5f;
         canvasGO.AddComponent<GraphicRaycaster>();
 
-        // Skor — ortada üst
+        // Skor — ortada, pause butonu altında
         scoreText = CreateText(canvasGO, "ScoreText", "0",
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0, -80), new Vector2(200, 100), 72,
+            new Vector2(0, -160), new Vector2(200, 100), 72,
             TextAlignmentOptions.Center);
 
-        // En iyi — sağ üst
+        // En iyi — sağ üst, pivot düzeltilmiş
         highScoreText = CreateText(canvasGO, "HighScore",
-            "En İyi: " + highScore,
+            "En Iyi: " + highScore,
             new Vector2(1f, 1f), new Vector2(1f, 1f),
-            new Vector2(-80, -50), new Vector2(250, 60), 28,
+            new Vector2(-16, -16), new Vector2(240, 55), 26,
             TextAlignmentOptions.Right);
+        highScoreText.GetComponent<RectTransform>().pivot = new Vector2(1f, 1f);
 
         // Başlangıç mesajı — orta
         startText = CreateText(canvasGO, "StartText",
@@ -127,7 +170,7 @@ void CreateVisualGround()
             TextAlignmentOptions.Center);
 
         CreateText(gameOverPanel, "GOHigh",
-            "En İyi: " + highScore,
+            "En Iyi: " + highScore,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
             new Vector2(0, 20), new Vector2(500, 70), 36,
             TextAlignmentOptions.Center,
@@ -162,14 +205,14 @@ void CreateVisualGround()
             PlayerPrefs.SetInt("Flappy_HighScore", highScore);
         }
         scoreText.text = score.ToString();
-        highScoreText.text = "En İyi: " + highScore;
+        highScoreText.text = "En Iyi: " + highScore;
     }
 
     public void GameOver()
     {
         if (gameEnded) return;
         gameEnded = true;
-        finalScoreText.text = "Skor: " + score + "\nEn İyi: " + highScore;
+        finalScoreText.text = "Skor: " + score + "\nEn Iyi: " + highScore;
         gameOverPanel.SetActive(true);
 
         // Tüm boruları durdur
@@ -177,8 +220,34 @@ void CreateVisualGround()
             pipe.Stop();
     }
 
-    void Restart()     => SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-    void GoToMainMenu()=> SceneManager.LoadScene("MainMenu");
+    void Restart()
+    {
+        // Boruları ve score zone'ları temizle
+        foreach (var p in FindObjectsOfType<PipeMover>()) Destroy(p.gameObject);
+
+        // Kuş ve spawner'ı temizle
+        if (birdGO != null) Destroy(birdGO);
+        if (pipeSpawnerGO != null) Destroy(pipeSpawnerGO);
+
+        // State sıfırla
+        score       = 0;
+        gameStarted = false;
+        gameEnded   = false;
+
+        gameOverPanel.SetActive(false);
+        scoreText.text = "0";
+        highScoreText.text  = "En Iyi: " + highScore;
+        if (startText != null) startText.gameObject.SetActive(true);
+
+        // Yeniden oluştur
+        birdGO = new GameObject("Bird");
+        birdGO.transform.position = new Vector3(-1.5f, 0, 0);
+        birdGO.AddComponent<BirdController>();
+
+        pipeSpawnerGO = new GameObject("PipeSpawner");
+        pipeSpawnerGO.AddComponent<PipeSpawner>();
+    }
+    void GoToMainMenu() => SceneManager.LoadScene(PauseManager.MainMenuScene);
 
     // ── Yardımcılar ──
     TextMeshProUGUI CreateText(GameObject parent, string name, string text,

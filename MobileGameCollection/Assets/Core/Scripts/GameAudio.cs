@@ -9,14 +9,18 @@ public class GameAudio : MonoBehaviour
 
     void Awake()
     {
-        if (Instance != null) { Destroy(gameObject); return; }
+        if (Instance != null && Instance != this) { Destroy(this); return; }
         Instance = this;
-        DontDestroyOnLoad(gameObject);
 
         sfxSource   = gameObject.AddComponent<AudioSource>();
         musicSource = gameObject.AddComponent<AudioSource>();
         musicSource.loop   = true;
         musicSource.volume = 0.3f;
+    }
+
+    void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     // ── Procedural ses efektleri (gerçek dosya gerekmez) ──
@@ -28,10 +32,28 @@ public class GameAudio : MonoBehaviour
     public static void PlayBounce()   => Instance?.Play(380, 0.05f, 0.03f);
     public static void PlayExplode()  => Instance?.Play(150, 0.15f, 0.2f);
     public static void PlayCollect()  => Instance?.Play(880, 0.08f, 0.06f);
+    public static void PlayChirp()    => Instance?.PlaySweep(380f, 820f, 0.13f, 0.1f);
 
     void Play(float freq, float volume, float duration)
     {
         AudioClip clip = GenerateTone(freq, duration);
+        sfxSource.PlayOneShot(clip, volume);
+    }
+
+    void PlaySweep(float startFreq, float endFreq, float volume, float duration)
+    {
+        int   sampleRate  = 44100;
+        int   sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples   = new float[sampleCount];
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float t       = (float)i / sampleRate;
+            float freq    = Mathf.Lerp(startFreq, endFreq, t / duration);
+            float envelope = Mathf.Pow(1f - t / duration, 0.4f);
+            samples[i]    = Mathf.Sin(2 * Mathf.PI * freq * t) * envelope * 0.5f;
+        }
+        AudioClip clip = AudioClip.Create("Chirp", sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
         sfxSource.PlayOneShot(clip, volume);
     }
 

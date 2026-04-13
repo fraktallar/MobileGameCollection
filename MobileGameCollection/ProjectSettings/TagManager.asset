@@ -11,6 +11,7 @@ TagManager:
   - Pipe
   - ScoreZone
   - Ball
+  - BodyPart
   layers:
   - Default
   - TransparentFX

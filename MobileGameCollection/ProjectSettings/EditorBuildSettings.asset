@@ -8,4 +8,19 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: 2cda990e2423bbf4892e6590ba056729
+  - enabled: 1
+    path: Assets/Games/01_Snake/Scenes/SnakeGame.unity
+    guid: 83f805226ad297141a16c6a207279581
+  - enabled: 1
+    path: Assets/Games/02_BrickBreaker/Scenes/BrickBreaker.unity
+    guid: 313dd9994dc49bc48aa943ab15dde294
+  - enabled: 1
+    path: Assets/Games/03_FlappyBird/Scenes/FlappyBird.unity
+    guid: 35ad6148de9d87e4e816e690d69d441c
+  - enabled: 1
+    path: Assets/Games/04_ColorSwitch/Scenes/ColorSwitch.unity
+    guid: 08886bfe6e52de6468b0300f77daac2c
+  - enabled: 1
+    path: Assets/Games/05_BubbleShooter/Scenes/BubbleShooter.unity
+    guid: 79ae2b6bee5e06042a5601b6a89391c1
   m_configObjects: {}

@@ -11,6 +11,10 @@ public class BubbleGrid : MonoBehaviour
     public  float startY  = 5.5f;
     public  float startX  = -4.0f;
 
+    /// <summary>Balon alanı sol/sağ dünya X (duvar ve çizgiler için).</summary>
+    public float PlayfieldMinX { get; private set; }
+    public float PlayfieldMaxX { get; private set; }
+
     // Tüm yerleşik balonlar (grid + fırlatılanlar dahil değil)
     private List<BubbleData> activeBubbles = new List<BubbleData>();
 
@@ -18,21 +22,25 @@ public class BubbleGrid : MonoBehaviour
 
     void Start()
     {
-    // Kameraya göre dinamik hesapla
-    Camera cam = Camera.main;
-    float camW = cam.orthographicSize * cam.aspect;
+        Camera cam = Camera.main;
+        float camW = cam.orthographicSize * cam.aspect;
 
-    cols   = 8;           // sabit sütun
-    bubbleR = 0.48f;      // biraz küçült
-    float diameter = bubbleR * 2f;
+        cols = 8;
+        bubbleR = 0.48f;
+        float d = bubbleR * 2f;
 
-    // Grid'i kameraya ortala
-    float totalW = cols * diameter;
-    startX = -(totalW / 2f) + bubbleR;
-    startY = cam.orthographicSize - 1.8f;
+        // Çift / tek sıra kayması (hex) göz önüne alınarak yatayda ortala
+        startX = bubbleR * 0.5f - (cols * d) * 0.5f;
+        startY = cam.orthographicSize - 1.8f;
 
-    SpawnGrid();
-}
+        PlayfieldMinX = startX - bubbleR;
+        PlayfieldMaxX = startX + cols * d;
+
+        SpawnGrid();
+
+        if (BubbleGameManager.Instance != null)
+            BubbleGameManager.Instance.UpdatePlayfieldSideLines(PlayfieldMinX, PlayfieldMaxX);
+    }
     void SpawnGrid()
     {
         float d = bubbleR * 2f;
@@ -55,6 +63,7 @@ public class BubbleGrid : MonoBehaviour
     public GameObject CreateBubble(Vector3 pos, int colorIdx)
     {
         GameObject go = new GameObject("Bubble");
+        go.transform.SetParent(transform);
         go.transform.position = pos;
         go.transform.localScale = Vector3.one * (bubbleR * 2f);
 
@@ -94,7 +103,7 @@ public class BubbleGrid : MonoBehaviour
 
     GameAudio.PlayBounce();
 
-    if (snapped.y < -5f)
+    if (snapped.y < -(Camera.main.orthographicSize - 2f))
         BubbleGameManager.Instance.GameOver();
 
     return false;

@@ -9,6 +9,16 @@ public class PauseManager : MonoBehaviour
 
     private GameObject pausePanel;
     private bool isPaused = false;
+    private int  resumeFrame = -100;
+
+    // Game manager'lar buraya Restart metodlarını bağlar
+    public static System.Action OnRestart;
+
+    // MainMenuManager.Start() tarafından doldurulur
+    public static string MainMenuScene = "SampleScene";
+    public static string MainMenuPath  = "Assets/Scenes/SampleScene.unity";
+
+    public bool IsInputBlocked => Time.frameCount <= resumeFrame + 1;
 
     void Awake()
     {
@@ -131,6 +141,7 @@ public class PauseManager : MonoBehaviour
     public void Resume()
     {
         isPaused = false;
+        resumeFrame = Time.frameCount;
         Time.timeScale = 1f;
         pausePanel.SetActive(false);
     }
@@ -139,14 +150,18 @@ public class PauseManager : MonoBehaviour
 
     void Restart()
     {
+        isPaused = false;
+        resumeFrame = Time.frameCount;
         Time.timeScale = 1f;
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        pausePanel.SetActive(false);
+        OnRestart?.Invoke();
     }
 
     void MainMenu()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene("MainMenu");
+        isPaused = false;
+        SceneManager.LoadScene(MainMenuScene);
     }
 
     // ── UI yardımcıları ──────────────────────────────────

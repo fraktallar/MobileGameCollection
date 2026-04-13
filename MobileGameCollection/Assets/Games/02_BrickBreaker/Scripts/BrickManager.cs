@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using TMPro;
 using UnityEngine.UI;
@@ -13,16 +15,26 @@ public class BrickManager : MonoBehaviour
     private GameObject gameOverPanel;
     private GameObject winPanel;
     private TextMeshProUGUI finalScoreText;
+    private TextMeshProUGUI winScoreText;
 
-    [Header("Grid Ayarları")]
-    public int columns = 8;
-    public int rows    = 5;
+    public int columns = 10;
+    [Tooltip("Dinamik ızgarada minimum satır; gerçek satır sayısı ekran ortasına kadar hesaplanır.")]
+    public int rows = 8;
 
     private int score = 0;
     private int lives = 3;
     private int totalBricks;
     private int brokenBricks = 0;
     private bool gameEnded = false;
+
+    // Restart için referanslar
+    private readonly List<GameObject> brickObjects = new List<GameObject>();
+    private readonly List<GameObject> activeBalls = new List<GameObject>();
+    private GameObject paddleGO;
+
+    private float ballSpeedMultiplier = 1f;
+    private float slowBallTimer;
+    private const float BaseBallSpeed = 12f;
 
     private Color[] rowColors = new Color[]
     {
@@ -33,20 +45,43 @@ public class BrickManager : MonoBehaviour
         new Color(0.3f, 0.6f, 1f),
     };
 
-    void Awake() => Instance = this;
+    void Awake() { Instance = this; Time.timeScale = 1f; }
+    void OnDestroy() => PauseManager.OnRestart -= Restart;
 
     void Start()
     {
+        PauseManager.OnRestart += Restart;
         BuildUI();
+        CreateSpaceBackground();
         SpawnBricks();
         SpawnPaddle();
         SpawnBall();
         UpdateUI();
     }
 
+    void Update()
+    {
+        if (slowBallTimer > 0f)
+        {
+            slowBallTimer -= Time.deltaTime;
+            if (slowBallTimer <= 0f)
+            {
+                slowBallTimer = 0f;
+                ballSpeedMultiplier = 1f;
+            }
+        }
+    }
+
     // ── UI'ı tamamen koddan kur ──────────────────────────
     void BuildUI()
 {
+    if (FindObjectOfType<EventSystem>() == null)
+    {
+        GameObject es = new GameObject("EventSystem");
+        es.AddComponent<EventSystem>();
+        es.AddComponent<StandaloneInputModule>();
+    }
+
     // Canvas
     GameObject canvasGO = new GameObject("Canvas");
     Canvas canvas = canvasGO.AddComponent<Canvas>();
@@ -99,7 +134,7 @@ public class BrickManager : MonoBehaviour
         new Vector2(0, 200), new Vector2(600, 120), 72,
         TextAlignmentOptions.Center, new Color(0.3f, 1f, 0.4f));
 
-    CreateText(winPanel, "WinScore", "Skor: 0",
+    winScoreText = CreateText(winPanel, "WinScore", "Skor: 0",
         new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
         new Vector2(0, 80), new Vector2(500, 80), 48,
         TextAlignmentOptions.Center);
@@ -234,53 +269,300 @@ void CreateButton(GameObject parent, string label,
     {
         Camera cam = Camera.main;
         float camW = cam.orthographicSize * cam.aspect;
-        float brickW  = (camW * 2f - 1f) / columns;
-        float brickH  = 0.55f;
-        float padding = 0.08f;
-        float startX  = -camW + brickW / 2f + 0.5f;
-        float startY  = cam.orthographicSize - 1.5f;
+        float padding = 0.06f;
+        float brickW = (camW * 2f - 0.6f) / columns;
+        float brickH = 0.38f;
+        float startX = -camW + brickW / 2f + 0.3f;
+        float rowStep = brickH + padding;
+        float topMargin = 1.2f;
+        float startY = cam.orthographicSize - topMargin + cam.transform.position.y;
+        float clipZ = Mathf.Abs(cam.transform.position.z);
+        if (clipZ < 0.01f) clipZ = 10f;
+        float midlineY = cam.ViewportToWorldPoint(new Vector3(0.5f, 0.5f, clipZ)).y;
+        float minCenterBottomRow = midlineY + brickH * 0.5f + 0.05f;
+        int brickRows = Mathf.FloorToInt((startY - minCenterBottomRow) / rowStep) + 1;
+        brickRows = Mathf.Clamp(brickRows, 4, 48);
 
-        totalBricks = columns * rows;
+        brickObjects.Clear();
+        bool[,] cellOn = new bool[brickRows, columns];
+        float fill = UnityEngine.Random.Range(0.78f, 0.95f);
 
-        for (int r = 0; r < rows; r++)
+        for (int r = 0; r < brickRows; r++)
+            for (int c = 0; c < columns; c++)
+                if (UnityEngine.Random.value < fill) cellOn[r, c] = true;
+
+        totalBricks = 0;
+        for (int r = 0; r < brickRows; r++)
+            for (int c = 0; c < columns; c++)
+                if (cellOn[r, c]) totalBricks++;
+
+        int minBricks = Mathf.Max(columns * 5, brickRows * columns * 62 / 100);
+        while (totalBricks < minBricks)
+        {
+            int r = Random.Range(0, brickRows);
+            int c = Random.Range(0, columns);
+            if (cellOn[r, c]) continue;
+            cellOn[r, c] = true;
+            totalBricks++;
+        }
+
+        int powerCap = Mathf.Clamp(totalBricks / 4, 10, 28);
+
+        for (int r = 0; r < brickRows; r++)
         {
             Color brickColor = rowColors[r % rowColors.Length];
-            int points = (rows - r) * 10;
+            int points = (brickRows - r) * 10;
+            int hp = r < 3 ? 2 : 1;
 
             for (int c = 0; c < columns; c++)
             {
+                if (!cellOn[r, c]) continue;
+
                 float x = startX + c * brickW;
-                float y = startY - r * (brickH + padding);
+                float y = startY - r * rowStep;
 
                 GameObject brick = new GameObject("Brick");
                 brick.transform.position = new Vector3(x, y, 0);
-                brick.transform.localScale =
-                    new Vector3(brickW - padding, brickH, 1f);
+                brick.transform.localScale = new Vector3(brickW - padding, brickH, 1f);
                 brick.tag = "Brick";
 
                 SpriteRenderer sr = brick.AddComponent<SpriteRenderer>();
                 sr.sprite = CreateSprite();
-                sr.color  = brickColor;
                 sr.sortingOrder = 1;
 
                 brick.AddComponent<BoxCollider2D>();
                 BrickData bd = brick.AddComponent<BrickData>();
                 bd.pointValue = points;
+
+                BrickPowerUp drop = BrickPowerUp.None;
+                if (powerCap > 0 && UnityEngine.Random.value < 0.30f)
+                {
+                    drop = (BrickPowerUp)UnityEngine.Random.Range(1, 4);
+                    powerCap--;
+                }
+
+                bd.Init(hp, brickColor, drop);
+                brickObjects.Add(brick);
             }
+        }
+
+        EnsureMinimumPowerUpBricks(brickRows);
+    }
+
+    void EnsureMinimumPowerUpBricks(int brickRows)
+    {
+        int CountPowers()
+        {
+            int n = 0;
+            foreach (GameObject go in brickObjects)
+            {
+                if (go == null) continue;
+                BrickData bd = go.GetComponent<BrickData>();
+                if (bd != null && bd.powerUp != BrickPowerUp.None) n++;
+            }
+            return n;
+        }
+
+        int target = Mathf.Clamp(4 + totalBricks / 10, 6, 18);
+        if (brickRows < 6) target = Mathf.Min(target, 5);
+
+        var noPow = new List<BrickData>();
+        foreach (GameObject go in brickObjects)
+        {
+            if (go == null) continue;
+            BrickData bd = go.GetComponent<BrickData>();
+            if (bd != null && bd.powerUp == BrickPowerUp.None) noPow.Add(bd);
+        }
+
+        for (int k = CountPowers(); k < target && noPow.Count > 0; k++)
+        {
+            int i = Random.Range(0, noPow.Count);
+            BrickData bd = noPow[i];
+            bd.powerUp = (BrickPowerUp)Random.Range(1, 4);
+            noPow.RemoveAt(i);
         }
     }
 
     void SpawnPaddle()
     {
-        GameObject paddle = new GameObject("Paddle");
-        paddle.tag = "Paddle";
-        paddle.AddComponent<PaddleController>();
+        paddleGO     = new GameObject("Paddle");
+        paddleGO.tag = "Paddle";
+        paddleGO.AddComponent<PaddleController>();
     }
 
     void SpawnBall()
     {
         GameObject ball = new GameObject("Ball");
         ball.AddComponent<BallController>();
+    }
+
+    public void RegisterBall(GameObject ball)
+    {
+        if (ball != null && !activeBalls.Contains(ball))
+            activeBalls.Add(ball);
+    }
+
+    public void NotifyBallLost(GameObject ball)
+    {
+        activeBalls.Remove(ball);
+        if (gameEnded) return;
+        if (activeBalls.Count > 0) return;
+
+        GameAudio.PlayGameOver();
+        CameraShake.Shake(0.3f, 0.15f);
+        lives--;
+        UpdateUI();
+        if (lives <= 0) GameOver();
+        else SpawnBall();
+    }
+
+    public float GetBallSpeed() => BaseBallSpeed * ballSpeedMultiplier;
+
+    public Bounds GetPaddleWorldBounds()
+    {
+        if (paddleGO == null) return new Bounds(Vector3.zero, Vector3.one);
+        PaddleController pc = paddleGO.GetComponent<PaddleController>();
+        return pc != null ? pc.GetWorldBounds() : new Bounds(paddleGO.transform.position, Vector3.one);
+    }
+
+    public void DropPowerUp(Vector3 brickWorldPos, BrickPowerUp type)
+    {
+        if (type == BrickPowerUp.None || gameEnded) return;
+        GameObject go = new GameObject("PowerUp");
+        go.transform.position = brickWorldPos + Vector3.down * 0.15f;
+        PowerUpPickup p = go.AddComponent<PowerUpPickup>();
+        p.Init(type);
+    }
+
+    public void ApplyPowerUp(BrickPowerUp type)
+    {
+        GameAudio.PlayPop();
+        switch (type)
+        {
+            case BrickPowerUp.WidePaddle:
+                if (paddleGO != null)
+                {
+                    PaddleController pc = paddleGO.GetComponent<PaddleController>();
+                    if (pc != null) pc.ApplyWidePaddleBuff(14f, 1.7f);
+                }
+                break;
+            case BrickPowerUp.MultiBall:
+                SpawnExtraBall();
+                break;
+            case BrickPowerUp.SlowBall:
+                slowBallTimer = 11f;
+                ballSpeedMultiplier = 0.68f;
+                break;
+        }
+    }
+
+    void SpawnExtraBall()
+    {
+        BallController[] balls = FindObjectsOfType<BallController>();
+        Vector3 pos;
+        Vector2 dir = new Vector2(UnityEngine.Random.Range(-0.38f, 0.38f), 1f).normalized;
+
+        BallController src = null;
+        foreach (BallController b in balls)
+        {
+            if (b != null && b.IsLaunched) { src = b; break; }
+        }
+
+        if (src != null)
+        {
+            pos = src.transform.position + new Vector3(UnityEngine.Random.Range(-0.12f, 0.12f), 0.06f, 0f);
+            Vector2 v = src.CurrentVelocity;
+            if (v.sqrMagnitude > 0.0001f)
+            {
+                float ang = UnityEngine.Random.Range(-32f, 32f) * Mathf.Deg2Rad;
+                float cos = Mathf.Cos(ang), sin = Mathf.Sin(ang);
+                dir = new Vector2(v.x * cos - v.y * sin, v.x * sin + v.y * cos).normalized;
+            }
+        }
+        else if (paddleGO != null)
+            pos = paddleGO.transform.position + Vector3.up * 0.55f;
+        else
+            return;
+
+        GameObject go = new GameObject("Ball");
+        BallController nb = go.AddComponent<BallController>();
+        nb.ConfigureImmediateLaunch(pos, dir);
+    }
+
+    public static readonly Color SpaceDeepColor = new Color(0.03f, 0.02f, 0.11f);
+    public static readonly Color SpaceTopColor = new Color(0.07f, 0.03f, 0.2f);
+
+    void CreateSpaceBackground()
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        cam.clearFlags = CameraClearFlags.SolidColor;
+        cam.backgroundColor = SpaceDeepColor;
+
+        GameObject bg = new GameObject("SpaceBackground");
+        bg.transform.position = new Vector3(0f, 0f, 10f);
+        SpriteRenderer sr = bg.AddComponent<SpriteRenderer>();
+        const int sz = 512;
+        sr.sprite = BuildSpaceSprite(sz);
+        sr.sortingOrder = -30;
+
+        float targetH = cam.orthographicSize * 2.45f;
+        float targetW = targetH * cam.aspect;
+        bg.transform.localScale = new Vector3(targetW / sz, targetH / sz, 1f);
+    }
+
+    static Sprite BuildSpaceSprite(int size)
+    {
+        Texture2D tex = new Texture2D(size, size);
+        tex.filterMode = FilterMode.Bilinear;
+        Color deep = SpaceDeepColor;
+        Color top = SpaceTopColor;
+        for (int y = 0; y < size; y++)
+        {
+            float t = y / (float)size;
+            Color row = Color.Lerp(deep, top, t);
+            for (int x = 0; x < size; x++)
+                tex.SetPixel(x, y, row);
+        }
+
+        var rng = new System.Random(UnityEngine.Random.Range(1, int.MaxValue));
+        for (int i = 0; i < 520; i++)
+        {
+            int x = rng.Next(2, size - 2);
+            int y = rng.Next(2, size - 2);
+            float s = rng.Next(3) == 0 ? 1f : 0.5f;
+            tex.SetPixel(x, y, new Color(0.95f, 0.95f, 1f) * s);
+            if (rng.Next(2) == 0)
+                tex.SetPixel(x + 1, y, new Color(0.95f, 0.95f, 1f) * (s * 0.6f));
+        }
+
+        for (int k = 0; k < 7; k++)
+        {
+            int cx = rng.Next(size / 5, 4 * size / 5);
+            int cy = rng.Next(size / 5, 4 * size / 5);
+            int rad = rng.Next(size / 16, size / 4);
+            Color neb = new Color(
+                rng.Next(2) == 0 ? 0.28f : 0.12f,
+                rng.Next(2) == 0 ? 0.1f : 0.22f,
+                rng.Next(2) == 0 ? 0.38f : 0.2f,
+                0.14f);
+            for (int y = Mathf.Max(0, cy - rad); y < Mathf.Min(size, cy + rad); y++)
+            {
+                for (int x = Mathf.Max(0, cx - rad); x < Mathf.Min(size, cx + rad); x++)
+                {
+                    float d = Vector2.Distance(new Vector2(x, y), new Vector2(cx, cy)) / rad;
+                    if (d < 1f)
+                    {
+                        Color o = tex.GetPixel(x, y);
+                        tex.SetPixel(x, y, Color.Lerp(o, neb, (1f - d) * (1f - d) * 0.55f));
+                    }
+                }
+            }
+        }
+
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 1f);
     }
 
     // ── Oyun olayları ────────────────────────────────────
@@ -306,6 +588,7 @@ void CreateButton(GameObject parent, string label,
     {
         if (gameEnded) return;
         gameEnded = true;
+        if (winScoreText != null) winScoreText.text = "Skor: " + score;
         winPanel.SetActive(true);
     }
 
@@ -315,22 +598,33 @@ void CreateButton(GameObject parent, string label,
         livesText.text = "Can: " + lives;
     }
 
-    public void LoseLife()
+    void Restart()
     {
-        GameAudio.PlayGameOver();
-        CameraShake.Shake(0.3f, 0.15f);
-        if (gameEnded) return;
-        lives--;
+        foreach (var b in brickObjects) if (b != null) Destroy(b);
+        brickObjects.Clear();
+        foreach (var ball in activeBalls) if (ball != null) Destroy(ball);
+        activeBalls.Clear();
+        foreach (var p in FindObjectsOfType<PowerUpPickup>())
+            if (p != null) Destroy(p.gameObject);
+        if (paddleGO != null) Destroy(paddleGO);
+
+        score = 0;
+        lives = 3;
+        brokenBricks = 0;
+        gameEnded = false;
+        ballSpeedMultiplier = 1f;
+        slowBallTimer = 0f;
+        gameOverPanel.SetActive(false);
+        winPanel.SetActive(false);
+
+        SpawnBricks();
+        SpawnPaddle();
+        SpawnBall();
         UpdateUI();
-        if (lives <= 0) GameOver();
-        else SpawnBall();
     }
 
-    void Restart() =>
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-
     void GoToMainMenu() =>
-        SceneManager.LoadScene("MainMenu");
+        SceneManager.LoadScene(PauseManager.MainMenuScene);
 
     Sprite CreateSprite()
     {

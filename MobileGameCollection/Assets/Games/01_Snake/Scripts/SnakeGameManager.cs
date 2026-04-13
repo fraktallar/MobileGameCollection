@@ -22,6 +22,7 @@ public class SnakeGameManager : MonoBehaviour
 
     private GameObject snakeHeadGO;
     private GameObject foodSpawnerGO;
+    private GameObject backgroundGO;
     private readonly List<GameObject> borderObjects = new List<GameObject>();
 
     void Awake()
@@ -33,14 +34,18 @@ public class SnakeGameManager : MonoBehaviour
 
     void Start()
     {
+        PauseManager.OnRestart += RestartGame;
         Camera cam = Camera.main ?? FindObjectOfType<Camera>();
         if (cam != null) cam.orthographicSize = 11f;
 
         CreateUI();
         UpdateUI();
+        DrawBackground();
         DrawBorders();
         SpawnGameObjects();
     }
+
+    void OnDestroy() => PauseManager.OnRestart -= RestartGame;
 
     void SpawnGameObjects()
     {
@@ -233,7 +238,8 @@ public class SnakeGameManager : MonoBehaviour
             snakeHeadGO.GetComponent<SnakeHead>()?.Cleanup();
             Destroy(snakeHeadGO);
         }
-        if (foodSpawnerGO != null) Destroy(foodSpawnerGO);
+        if (foodSpawnerGO  != null) Destroy(foodSpawnerGO);
+        if (backgroundGO   != null) Destroy(backgroundGO);
 
         foreach (var b in borderObjects) if (b != null) Destroy(b);
         borderObjects.Clear();
@@ -248,19 +254,72 @@ public class SnakeGameManager : MonoBehaviour
 
         gameOverPanel.SetActive(false);
         UpdateUI();
+        DrawBackground();
         DrawBorders();
         SpawnGameObjects();
     }
 
     public void GoToMainMenu()
     {
-        SceneManager.LoadScene("MainMenu");
+        SceneManager.LoadScene(PauseManager.MainMenuScene);
     }
 
     public float GetMoveInterval() => moveInterval;
 
     public void IncreaseSpeed()
     {
-        moveInterval = Mathf.Max(0.08f, moveInterval - 0.005f);
+        moveInterval = Mathf.Max(0.08f, moveInterval - 0.002f);
+    }
+
+    void DrawBackground()
+    {
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        float h = cam.orthographicSize;
+        float w = h * cam.aspect;
+        int ppu = 8; // piksel/birim
+        int texW = Mathf.RoundToInt(w * 2 * ppu);
+        int texH = Mathf.RoundToInt(h * 2 * ppu);
+
+        var tex = new Texture2D(texW, texH) { filterMode = FilterMode.Point };
+
+        // Çimen tabanı: dama tahtası desenli yeşil
+        for (int y = 0; y < texH; y++)
+        for (int x = 0; x < texW; x++)
+        {
+            int cx = x / ppu, cy = y / ppu;
+            bool alt = (cx + cy) % 2 == 0;
+            Color cell = alt ? new Color(0.11f, 0.30f, 0.11f)
+                             : new Color(0.13f, 0.34f, 0.13f);
+            tex.SetPixel(x, y, cell);
+        }
+
+        // Izgara çizgileri (hafif koyu)
+        for (int y = 0; y < texH; y++)
+        for (int x = 0; x < texW; x++)
+            if (x % ppu == 0 || y % ppu == 0)
+                tex.SetPixel(x, y, tex.GetPixel(x, y) * 0.80f);
+
+        // Rastgele çimen tüyleri
+        var rng = new System.Random(42);
+        for (int i = 0; i < texW * texH / 12; i++)
+        {
+            int px = rng.Next(texW), py = rng.Next(texH);
+            // Sadece hücre ortasına koy (çizgi üstüne değil)
+            if (px % ppu > 1 && py % ppu > 1)
+                tex.SetPixel(px, py, new Color(0.20f, 0.52f, 0.18f));
+        }
+
+        tex.Apply();
+        float sprW = w * 2f, sprH = h * 2f;
+        var spr = Sprite.Create(tex, new Rect(0, 0, texW, texH),
+                                new Vector2(0.5f, 0.5f), ppu);
+
+        backgroundGO = new GameObject("Background");
+        var sr = backgroundGO.AddComponent<SpriteRenderer>();
+        sr.sprite = spr;
+        sr.sortingOrder = -10;
+        backgroundGO.transform.position = Vector3.zero;
     }
 }
